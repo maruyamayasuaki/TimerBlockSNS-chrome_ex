@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pomodoro Blocker</title>
+    <style>
+        body {
+            width: 300px;
+            height: 200px;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        
+        .timer-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #333;
+            margin: 20px 0;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        
+        .start-btn {
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        .start-btn:hover {
+            background-color: #45a049;
+        }
+        
+        .stop-btn {
+            background-color: #f44336;
+            color: white;
+        }
+        
+        .stop-btn:hover {
+            background-color: #da190b;
+        }
+        
+        .disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <h2>Pomodoro Blocker</h2>
+    <div id="timer-display" class="timer-display">25:00</div>
+    
+    <div class="controls">
+        <button id="start-btn" class="start-btn">開始</button>
+        <button id="stop-btn" class="stop-btn disabled" disabled>停止</button>
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>

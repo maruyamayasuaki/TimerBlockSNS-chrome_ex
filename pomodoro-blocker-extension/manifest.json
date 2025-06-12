@@ -1,0 +1,32 @@
+{
+  "manifest_version": 3,
+  "name": "Pomodoro Blocker",
+  "version": "1.0",
+  "description": "25分間タイマー+特定サイトを集中のためブロックする拡張機能",
+  "permissions": [
+    "tabs",
+    "activeTab",
+    "storage",
+    "declarativeNetRequest"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Pomodoro Blocker",
+    "default_icon": {
+      "16": "icons/icon.png",
+      "48": "icons/icon.png",
+      "128": "icons/icon.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon.png",
+    "48": "icons/icon.png",
+    "128": "icons/icon.png"
+  }
+}
