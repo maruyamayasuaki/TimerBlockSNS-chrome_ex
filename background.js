@@ -30,6 +30,7 @@ class PomodoroBlocker {
         ];
         
         this.isBlocking = false;
+        // declarativeNetRequest ルール保存用
         this.blockingRules = [];
         
         this.initializeEventListeners();
@@ -65,6 +66,17 @@ class PomodoroBlocker {
                 this.checkAndBlockTab(tab.id, tab.url);
             }
         });
+
+        // SPAなどのURL変更を検知
+        chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
+            if (this.isBlocking) {
+                chrome.tabs.get(details.tabId).then(tab => {
+                    if (tab.url) {
+                        this.checkAndBlockTab(tab.id, tab.url);
+                    }
+                }).catch(() => {});
+            }
+        });
     }
     
     async loadBlockingState() {
@@ -87,6 +99,23 @@ class PomodoroBlocker {
     async startBlocking(duration) {
         this.isBlocking = true;
         console.log(`ブロック開始: ${duration}秒間`);
+
+        // declarativeNetRequest用のルールを作成
+        this.blockingRules = this.blockedSites.map((site, index) => ({
+            id: index + 1,
+            priority: 1,
+            action: { type: 'block' },
+            condition: { urlFilter: `||${site}^` }
+        }));
+
+        try {
+            await chrome.declarativeNetRequest.updateDynamicRules({
+                addRules: this.blockingRules,
+                removeRuleIds: this.blockingRules.map(r => r.id)
+            });
+        } catch (error) {
+            console.error('DNRルール追加エラー:', error);
+        }
         
         // 現在開いているタブをチェック
         try {
@@ -109,6 +138,16 @@ class PomodoroBlocker {
     stopBlocking() {
         this.isBlocking = false;
         console.log('ブロック停止');
+
+        // 動的ルールを削除
+        if (this.blockingRules.length > 0) {
+            chrome.declarativeNetRequest.updateDynamicRules({
+                removeRuleIds: this.blockingRules.map(r => r.id)
+            }).catch(error => {
+                console.error('DNRルール削除エラー:', error);
+            });
+            this.blockingRules = [];
+        }
     }
     
     checkAndBlockTab(tabId, url) {
