@@ -30,6 +30,8 @@ class PomodoroBlocker {
         ];
         
         this.isBlocking = false;
+        // バッジ表示更新用タイマー
+        this.badgeTimer = null;
         // declarativeNetRequest ルール保存用
         this.blockingRules = [];
         
@@ -86,7 +88,7 @@ class PomodoroBlocker {
                 const state = result.pomodoroState;
                 const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
                 const timeLeft = Math.max(0, state.timeLeft - elapsed);
-                
+
                 if (timeLeft > 0) {
                     this.startBlocking(timeLeft);
                 }
@@ -95,9 +97,39 @@ class PomodoroBlocker {
             console.error('ブロック状態の読み込みエラー:', error);
         }
     }
+
+    startBadgeTimer(duration) {
+        if (this.badgeTimer) {
+            clearInterval(this.badgeTimer);
+        }
+
+        const start = Date.now();
+        chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
+        this.badgeTimer = setInterval(() => {
+            const elapsed = Math.floor((Date.now() - start) / 1000);
+            const timeLeft = Math.max(0, duration - elapsed);
+            const minutes = Math.ceil(timeLeft / 60);
+            chrome.action.setBadgeText({ text: minutes.toString() });
+
+            if (timeLeft <= 0) {
+                clearInterval(this.badgeTimer);
+                this.badgeTimer = null;
+                chrome.action.setBadgeText({ text: '' });
+            }
+        }, 1000);
+    }
+
+    clearBadgeTimer() {
+        if (this.badgeTimer) {
+            clearInterval(this.badgeTimer);
+            this.badgeTimer = null;
+        }
+        chrome.action.setBadgeText({ text: '' });
+    }
     
     async startBlocking(duration) {
         this.isBlocking = true;
+        this.startBadgeTimer(duration);
         console.log(`ブロック開始: ${duration}秒間`);
 
         // declarativeNetRequest用のルールを作成
@@ -137,6 +169,7 @@ class PomodoroBlocker {
     
     stopBlocking() {
         this.isBlocking = false;
+        this.clearBadgeTimer();
         console.log('ブロック停止');
 
         // 動的ルールを削除
