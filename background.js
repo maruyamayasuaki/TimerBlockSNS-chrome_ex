@@ -32,11 +32,8 @@ class PomodoroBlocker {
         this.isBlocking = false;
         // バッジ表示更新用タイマー
         this.badgeTimer = null;
-<<<<<<< HEAD
-=======
         this.startTime = null;
         this.totalDuration = 0;
->>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
         // declarativeNetRequest ルール保存用
         this.blockingRules = [];
         
@@ -112,36 +109,17 @@ class PomodoroBlocker {
         }
     }
 
-<<<<<<< HEAD
-=======
     getTimeLeft() {
         if (!this.isBlocking || !this.startTime) return 0;
         const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
         return Math.max(0, this.totalDuration - elapsed);
     }
 
->>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
     startBadgeTimer(duration) {
         if (this.badgeTimer) {
             clearInterval(this.badgeTimer);
         }
 
-<<<<<<< HEAD
-        const start = Date.now();
-        chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
-        this.badgeTimer = setInterval(() => {
-            const elapsed = Math.floor((Date.now() - start) / 1000);
-            const timeLeft = Math.max(0, duration - elapsed);
-            const minutes = Math.ceil(timeLeft / 60);
-            chrome.action.setBadgeText({ text: minutes.toString() });
-
-            if (timeLeft <= 0) {
-                clearInterval(this.badgeTimer);
-                this.badgeTimer = null;
-                chrome.action.setBadgeText({ text: '' });
-            }
-        }, 1000);
-=======
         this.startTime = Date.now();
         this.totalDuration = duration;
         
@@ -193,7 +171,6 @@ class PomodoroBlocker {
         
         // 1秒ごとに更新
         this.badgeTimer = setInterval(updateBadge, 1000);
->>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
     }
 
     clearBadgeTimer() {
@@ -202,11 +179,8 @@ class PomodoroBlocker {
             this.badgeTimer = null;
         }
         chrome.action.setBadgeText({ text: '' });
-<<<<<<< HEAD
-=======
         this.startTime = null;
         this.totalDuration = 0;
->>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
     }
     
     async startBlocking(duration) {
