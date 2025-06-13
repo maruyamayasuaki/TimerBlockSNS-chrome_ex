@@ -32,6 +32,11 @@ class PomodoroBlocker {
         this.isBlocking = false;
         // バッジ表示更新用タイマー
         this.badgeTimer = null;
+<<<<<<< HEAD
+=======
+        this.startTime = null;
+        this.totalDuration = 0;
+>>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
         // declarativeNetRequest ルール保存用
         this.blockingRules = [];
         
@@ -51,6 +56,13 @@ class PomodoroBlocker {
                     break;
                 case 'timerComplete':
                     this.stopBlocking();
+                    break;
+                case 'getBadgeStatus':
+                    // ポップアップが開かれた時にバッジ状態を同期
+                    sendResponse({
+                        isRunning: this.isBlocking,
+                        timeLeft: this.isBlocking ? this.getTimeLeft() : 0
+                    });
                     break;
             }
         });
@@ -90,6 +102,8 @@ class PomodoroBlocker {
                 const timeLeft = Math.max(0, state.timeLeft - elapsed);
 
                 if (timeLeft > 0) {
+                    this.startTime = state.startTime;
+                    this.totalDuration = state.timeLeft;
                     this.startBlocking(timeLeft);
                 }
             }
@@ -98,11 +112,21 @@ class PomodoroBlocker {
         }
     }
 
+<<<<<<< HEAD
+=======
+    getTimeLeft() {
+        if (!this.isBlocking || !this.startTime) return 0;
+        const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
+        return Math.max(0, this.totalDuration - elapsed);
+    }
+
+>>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
     startBadgeTimer(duration) {
         if (this.badgeTimer) {
             clearInterval(this.badgeTimer);
         }
 
+<<<<<<< HEAD
         const start = Date.now();
         chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
         this.badgeTimer = setInterval(() => {
@@ -117,6 +141,59 @@ class PomodoroBlocker {
                 chrome.action.setBadgeText({ text: '' });
             }
         }, 1000);
+=======
+        this.startTime = Date.now();
+        this.totalDuration = duration;
+        
+        // 初期状態の設定
+        chrome.action.setBadgeBackgroundColor({ color: '#ff6b6b' });
+        chrome.action.setBadgeTextColor({ color: '#ffffff' });
+        
+        const updateBadge = () => {
+            const timeLeft = this.getTimeLeft();
+            
+            if (timeLeft <= 0) {
+                // タイマー完了
+                clearInterval(this.badgeTimer);
+                this.badgeTimer = null;
+                chrome.action.setBadgeText({ text: '' });
+                return;
+            }
+            
+            // 残り時間を分:秒形式で表示（バッジの文字数制限を考慮）
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            
+            let badgeText;
+            if (minutes > 0) {
+                // 1分以上の場合は分数のみ表示
+                badgeText = `${minutes}m`;
+            } else {
+                // 1分未満の場合は秒数表示
+                badgeText = `${seconds}s`;
+            }
+            
+            // 残り時間に応じてバッジの色を変更
+            if (timeLeft <= 60) {
+                // 残り1分以下は赤色
+                chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
+            } else if (timeLeft <= 300) {
+                // 残り5分以下はオレンジ色
+                chrome.action.setBadgeBackgroundColor({ color: '#ff9500' });
+            } else {
+                // それ以外は通常の赤色
+                chrome.action.setBadgeBackgroundColor({ color: '#ff6b6b' });
+            }
+            
+            chrome.action.setBadgeText({ text: badgeText });
+        };
+        
+        // 即座に更新
+        updateBadge();
+        
+        // 1秒ごとに更新
+        this.badgeTimer = setInterval(updateBadge, 1000);
+>>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
     }
 
     clearBadgeTimer() {
@@ -125,6 +202,11 @@ class PomodoroBlocker {
             this.badgeTimer = null;
         }
         chrome.action.setBadgeText({ text: '' });
+<<<<<<< HEAD
+=======
+        this.startTime = null;
+        this.totalDuration = 0;
+>>>>>>> 4fb9bed (タイマーの表示をアイコン上に)
     }
     
     async startBlocking(duration) {
@@ -213,6 +295,11 @@ class PomodoroBlocker {
     }
     
     createBlockPageContent(blockedSite) {
+        const timeLeft = this.getTimeLeft();
+        const minutes = Math.floor(timeLeft / 60);
+        const seconds = timeLeft % 60;
+        const timeDisplay = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        
         return `
 <!DOCTYPE html>
 <html lang="ja">
@@ -252,6 +339,14 @@ class PomodoroBlocker {
             font-size: 28px;
         }
         
+        .timer-display {
+            font-size: 48px;
+            font-weight: bold;
+            color: #ffeb3b;
+            margin: 20px 0;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
+        }
+        
         p {
             font-size: 18px;
             line-height: 1.6;
@@ -274,6 +369,7 @@ class PomodoroBlocker {
     <div class="container">
         <div class="icon">🍅</div>
         <h1>サイトがブロックされています</h1>
+        <div class="timer-display">${timeDisplay}</div>
         <p>
             <span class="site-name">${blockedSite}</span> は現在ブロックされています。<br>
             ポモドーロタイマーが終了するまでお待ちください。
@@ -283,6 +379,13 @@ class PomodoroBlocker {
             あなたならきっとできます 💪
         </p>
     </div>
+    
+    <script>
+        // ページ表示時に最新の残り時間を取得して表示
+        setInterval(() => {
+            location.reload();
+        }, 30000); // 30秒ごとにページを更新
+    </script>
 </body>
 </html>`;
     }
