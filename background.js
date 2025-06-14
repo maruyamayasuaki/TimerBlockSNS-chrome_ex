@@ -53,6 +53,7 @@ class PomodoroBlocker {
                     break;
                 case 'timerComplete':
                     this.stopBlocking();
+                    this.showCompletionNotification(); // 完了通知を追加
                     break;
                 case 'getBadgeStatus':
                     // ポップアップが開かれた時にバッジ状態を同期
@@ -86,6 +87,13 @@ class PomodoroBlocker {
                         this.checkAndBlockTab(tab.id, tab.url);
                     }
                 }).catch(() => {});
+            }
+        });
+
+        // ナビゲーション開始時もチェック
+        chrome.webNavigation.onBeforeNavigate.addListener((details) => {
+            if (this.isBlocking && details.frameId === 0) { // メインフレームのみ
+                this.checkAndBlockTab(details.tabId, details.url);
             }
         });
     }
@@ -131,10 +139,11 @@ class PomodoroBlocker {
             const timeLeft = this.getTimeLeft();
             
             if (timeLeft <= 0) {
-                // タイマー完了
+                // タイマー完了（修正②：自動完了通知を追加）
                 clearInterval(this.badgeTimer);
                 this.badgeTimer = null;
                 chrome.action.setBadgeText({ text: '' });
+                this.showCompletionNotification();
                 return;
             }
             
@@ -192,8 +201,11 @@ class PomodoroBlocker {
         this.blockingRules = this.blockedSites.map((site, index) => ({
             id: index + 1,
             priority: 1,
-            action: { type: 'block' },
-            condition: { urlFilter: `||${site}^` }
+            action: { type: 'redirect', redirect: { url: 'data:text/html;charset=utf-8,' + encodeURIComponent(this.createBlockPageContent(site)) } },
+            condition: { 
+                urlFilter: `||${site}^`,
+                resourceTypes: ['main_frame', 'sub_frame']
+            }
         }));
 
         try {
@@ -220,6 +232,7 @@ class PomodoroBlocker {
         // 指定時間後に自動停止
         setTimeout(() => {
             this.stopBlocking();
+            this.showCompletionNotification(); // 修正②：自動完了時の通知
         }, duration * 1000);
     }
     
@@ -236,6 +249,26 @@ class PomodoroBlocker {
                 console.error('DNRルール削除エラー:', error);
             });
             this.blockingRules = [];
+        }
+    }
+
+    // 完了通知を表示する関数
+    async showCompletionNotification() {
+        try {
+            // 通知を表示
+            await chrome.notifications.create('pomodoro-complete', {
+                type: 'basic',
+                iconUrl: 'icons/icon.png',
+                title: 'ポモドーロタイマー完了！',
+                message: 'お疲れ様でした！25分間の集中時間が完了しました。'
+            });
+
+            // 3秒後に通知を自動で閉じる
+            setTimeout(() => {
+                chrome.notifications.clear('pomodoro-complete');
+            }, 3000);
+        } catch (error) {
+            console.error('通知表示エラー:', error);
         }
     }
     
@@ -259,7 +292,7 @@ class PomodoroBlocker {
     }
     
     blockTab(tabId, hostname) {
-        // ブロックページにリダイレクト
+        // ブロックページにリダイレクト（修正①：確実にブロックページを表示）
         const blockPageContent = this.createBlockPageContent(hostname);
         const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(blockPageContent);
         
@@ -355,10 +388,10 @@ class PomodoroBlocker {
     </div>
     
     <script>
-        // ページ表示時に最新の残り時間を取得して表示
+        // ページ表示時に最新の残り時間を取得して表示（修正①：より頻繁に更新）
         setInterval(() => {
             location.reload();
-        }, 30000); // 30秒ごとにページを更新
+        }, 10000); // 10秒ごとにページを更新
     </script>
 </body>
 </html>`;

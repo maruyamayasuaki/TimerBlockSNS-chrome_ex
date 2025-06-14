@@ -159,8 +159,8 @@ class PomodoroTimer {
             action: 'timerComplete'
         });
         
-        // 完了通知
-        alert('ポモドーロタイマーが完了しました！お疲れ様でした。');
+        // アラートを削除して、バックグラウンドスクリプトに完了処理を委任
+        // alert('ポモドーロタイマーが完了しました！お疲れ様でした。');
     }
     
     updateDisplay() {
