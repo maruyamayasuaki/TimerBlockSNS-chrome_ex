@@ -30,11 +30,9 @@ class PomodoroBlocker {
         ];
         
         this.isBlocking = false;
-        // バッジ表示更新用タイマー
         this.badgeTimer = null;
         this.startTime = null;
         this.totalDuration = 0;
-        // declarativeNetRequest ルール保存用
         this.blockingRules = [];
         
         this.initializeEventListeners();
@@ -42,7 +40,6 @@ class PomodoroBlocker {
     }
     
     initializeEventListeners() {
-        // ポップアップからのメッセージを受信
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             switch (message.action) {
                 case 'startBlocking':
@@ -53,10 +50,9 @@ class PomodoroBlocker {
                     break;
                 case 'timerComplete':
                     this.stopBlocking();
-                    this.showCompletionNotification(); // 完了通知を追加
+                    this.showCompletionNotification();
                     break;
                 case 'getBadgeStatus':
-                    // ポップアップが開かれた時にバッジ状態を同期
                     sendResponse({
                         isRunning: this.isBlocking,
                         timeLeft: this.isBlocking ? this.getTimeLeft() : 0
@@ -65,37 +61,8 @@ class PomodoroBlocker {
             }
         });
         
-        // タブの更新時にブロックをチェック
-        chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-            if (this.isBlocking && changeInfo.status === 'loading' && tab.url) {
-                this.checkAndBlockTab(tabId, tab.url);
-            }
-        });
-        
-        // 新しいタブが作成されたときにブロックをチェック
-        chrome.tabs.onCreated.addListener((tab) => {
-            if (this.isBlocking && tab.url) {
-                this.checkAndBlockTab(tab.id, tab.url);
-            }
-        });
-
-        // SPAなどのURL変更を検知
-        chrome.webNavigation.onHistoryStateUpdated.addListener((details) => {
-            if (this.isBlocking) {
-                chrome.tabs.get(details.tabId).then(tab => {
-                    if (tab.url) {
-                        this.checkAndBlockTab(tab.id, tab.url);
-                    }
-                }).catch(() => {});
-            }
-        });
-
-        // ナビゲーション開始時もチェック
-        chrome.webNavigation.onBeforeNavigate.addListener((details) => {
-            if (this.isBlocking && details.frameId === 0) { // メインフレームのみ
-                this.checkAndBlockTab(details.tabId, details.url);
-            }
-        });
+        // declarativeNetRequestのみを使用してブロック
+        // タブ監視は削除（activeTab権限では全タブアクセス不可）
     }
     
     async loadBlockingState() {
@@ -131,7 +98,6 @@ class PomodoroBlocker {
         this.startTime = Date.now();
         this.totalDuration = duration;
         
-        // 初期状態の設定
         chrome.action.setBadgeBackgroundColor({ color: '#ff6b6b' });
         chrome.action.setBadgeTextColor({ color: '#ffffff' });
         
@@ -139,7 +105,6 @@ class PomodoroBlocker {
             const timeLeft = this.getTimeLeft();
             
             if (timeLeft <= 0) {
-                // タイマー完了（修正②：自動完了通知を追加）
                 clearInterval(this.badgeTimer);
                 this.badgeTimer = null;
                 chrome.action.setBadgeText({ text: '' });
@@ -147,38 +112,28 @@ class PomodoroBlocker {
                 return;
             }
             
-            // 残り時間を分:秒形式で表示（バッジの文字数制限を考慮）
             const minutes = Math.floor(timeLeft / 60);
             const seconds = timeLeft % 60;
             
             let badgeText;
             if (minutes > 0) {
-                // 1分以上の場合は分数のみ表示
                 badgeText = `${minutes}m`;
             } else {
-                // 1分未満の場合は秒数表示
                 badgeText = `${seconds}s`;
             }
             
-            // 残り時間に応じてバッジの色を変更
             if (timeLeft <= 60) {
-                // 残り1分以下は赤色
                 chrome.action.setBadgeBackgroundColor({ color: '#ff0000' });
             } else if (timeLeft <= 300) {
-                // 残り5分以下はオレンジ色
                 chrome.action.setBadgeBackgroundColor({ color: '#ff9500' });
             } else {
-                // それ以外は通常の赤色
                 chrome.action.setBadgeBackgroundColor({ color: '#ff6b6b' });
             }
             
             chrome.action.setBadgeText({ text: badgeText });
         };
         
-        // 即座に更新
         updateBadge();
-        
-        // 1秒ごとに更新
         this.badgeTimer = setInterval(updateBadge, 1000);
     }
 
@@ -198,15 +153,38 @@ class PomodoroBlocker {
         console.log(`ブロック開始: ${duration}秒間`);
 
         // declarativeNetRequest用のルールを作成
-        this.blockingRules = this.blockedSites.map((site, index) => ({
-            id: index + 1,
-            priority: 1,
-            action: { type: 'redirect', redirect: { url: 'data:text/html;charset=utf-8,' + encodeURIComponent(this.createBlockPageContent(site)) } },
-            condition: { 
-                urlFilter: `||${site}^`,
-                resourceTypes: ['main_frame', 'sub_frame']
+        this.blockingRules = this.blockedSites.flatMap((site, index) => [
+            // メインドメイン
+            {
+                id: index * 2 + 1,
+                priority: 1,
+                action: { 
+                    type: 'redirect', 
+                    redirect: { 
+                        url: 'data:text/html;charset=utf-8,' + encodeURIComponent(this.createBlockPageContent(site)) 
+                    } 
+                },
+                condition: { 
+                    urlFilter: `||${site}^`,
+                    resourceTypes: ['main_frame']
+                }
+            },
+            // wwwサブドメイン
+            {
+                id: index * 2 + 2,
+                priority: 1,
+                action: { 
+                    type: 'redirect', 
+                    redirect: { 
+                        url: 'data:text/html;charset=utf-8,' + encodeURIComponent(this.createBlockPageContent(site)) 
+                    } 
+                },
+                condition: { 
+                    urlFilter: `||www.${site}^`,
+                    resourceTypes: ['main_frame']
+                }
             }
-        }));
+        ]);
 
         try {
             await chrome.declarativeNetRequest.updateDynamicRules({
@@ -217,22 +195,10 @@ class PomodoroBlocker {
             console.error('DNRルール追加エラー:', error);
         }
         
-        // 現在開いているタブをチェック
-        try {
-            const tabs = await chrome.tabs.query({});
-            tabs.forEach(tab => {
-                if (tab.url) {
-                    this.checkAndBlockTab(tab.id, tab.url);
-                }
-            });
-        } catch (error) {
-            console.error('タブチェックエラー:', error);
-        }
-        
         // 指定時間後に自動停止
         setTimeout(() => {
             this.stopBlocking();
-            this.showCompletionNotification(); // 修正②：自動完了時の通知
+            this.showCompletionNotification();
         }, duration * 1000);
     }
     
@@ -241,7 +207,6 @@ class PomodoroBlocker {
         this.clearBadgeTimer();
         console.log('ブロック停止');
 
-        // 動的ルールを削除
         if (this.blockingRules.length > 0) {
             chrome.declarativeNetRequest.updateDynamicRules({
                 removeRuleIds: this.blockingRules.map(r => r.id)
@@ -252,10 +217,8 @@ class PomodoroBlocker {
         }
     }
 
-    // 完了通知を表示する関数
     async showCompletionNotification() {
         try {
-            // 通知を表示
             await chrome.notifications.create('pomodoro-complete', {
                 type: 'basic',
                 iconUrl: 'icons/icon.png',
@@ -263,42 +226,12 @@ class PomodoroBlocker {
                 message: 'お疲れ様でした！25分間の集中時間が完了しました。'
             });
 
-            // 3秒後に通知を自動で閉じる
             setTimeout(() => {
                 chrome.notifications.clear('pomodoro-complete');
             }, 3000);
         } catch (error) {
             console.error('通知表示エラー:', error);
         }
-    }
-    
-    checkAndBlockTab(tabId, url) {
-        if (!this.isBlocking) return;
-        
-        try {
-            const hostname = new URL(url).hostname.toLowerCase();
-            
-            // ブロック対象サイトかチェック
-            const isBlocked = this.blockedSites.some(site => {
-                return hostname.includes(site) || hostname.endsWith('.' + site);
-            });
-            
-            if (isBlocked) {
-                this.blockTab(tabId, hostname);
-            }
-        } catch (error) {
-            // URLの解析エラーは無視
-        }
-    }
-    
-    blockTab(tabId, hostname) {
-        // ブロックページにリダイレクト（修正①：確実にブロックページを表示）
-        const blockPageContent = this.createBlockPageContent(hostname);
-        const dataUrl = 'data:text/html;charset=utf-8,' + encodeURIComponent(blockPageContent);
-        
-        chrome.tabs.update(tabId, { url: dataUrl }).catch(error => {
-            console.error('タブブロックエラー:', error);
-        });
     }
     
     createBlockPageContent(blockedSite) {
@@ -388,15 +321,13 @@ class PomodoroBlocker {
     </div>
     
     <script>
-        // ページ表示時に最新の残り時間を取得して表示（修正①：より頻繁に更新）
         setInterval(() => {
             location.reload();
-        }, 10000); // 10秒ごとにページを更新
+        }, 10000);
     </script>
 </body>
 </html>`;
     }
 }
 
-// サービスワーカーが開始されたときにブロッカーを初期化
 new PomodoroBlocker();
