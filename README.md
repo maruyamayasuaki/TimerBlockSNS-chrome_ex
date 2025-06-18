@@ -1,7 +1,8 @@
 # Pomodoro Blocker Extension
 
 ポモドーロテクニック用のWebサイトブロッカーChrome拡張機能です。
-
+↓拡張機能についての記事
+https://qiita.com/yasu_qita/items/1a26adb8dff47c402d8e
 ## 機能
 
 - 25分間のポモドーロタイマー
