@@ -1,200 +1,144 @@
 class PomodoroTimer {
     constructor() {
-        this.duration = 25 * 60; // 25分（秒単位）
-        this.timeLeft = this.duration;
-        this.isRunning = false;
-        this.intervalId = null;
-        this.startTime = null;
-        
+        this.workDurationInput = document.getElementById('work-duration');
+        this.breakDurationInput = document.getElementById('break-duration');
         this.timerDisplay = document.getElementById('timer-display');
         this.startBtn = document.getElementById('start-btn');
-        this.stopBtn = document.getElementById('stop-btn');
-        
+        this.statusDisplay = document.getElementById('status');
+
+        this.loadSettings();
+        this.timeLeft = this.workDuration * 60;
+        this.isWorkTime = true;
+        this.isRunning = false;
+        this.intervalId = null;
+
         this.initializeEventListeners();
+        this.updateDisplay();
         this.loadState();
     }
-    
+
     initializeEventListeners() {
-        this.startBtn.addEventListener('click', () => this.startTimer());
-        this.stopBtn.addEventListener('click', () => this.stopTimer());
+        this.startBtn.addEventListener('click', () => this.toggleTimer());
+        this.workDurationInput.addEventListener('change', () => this.updateSettings());
+        this.breakDurationInput.addEventListener('change', () => this.updateSettings());
     }
-    
+
+    loadSettings() {
+        this.workDuration = parseInt(localStorage.getItem('workDuration')) || 25;
+        this.breakDuration = parseInt(localStorage.getItem('breakDuration')) || 5;
+        this.workDurationInput.value = this.workDuration;
+        this.breakDurationInput.value = this.breakDuration;
+    }
+
+    updateSettings() {
+        this.workDuration = parseInt(this.workDurationInput.value) || 25;
+        this.breakDuration = parseInt(this.breakDurationInput.value) || 5;
+        localStorage.setItem('workDuration', this.workDuration);
+        localStorage.setItem('breakDuration', this.breakDuration);
+
+        if (!this.isRunning) {
+            this.isWorkTime = true;
+            this.timeLeft = this.workDuration * 60;
+            this.updateDisplay();
+        }
+    }
+
     async loadState() {
         try {
-            // まずバックグラウンドスクリプトから現在の状態を取得
-            const badgeStatus = await chrome.runtime.sendMessage({ action: 'getBadgeStatus' });
-            
-            if (badgeStatus && badgeStatus.isRunning) {
+            const state = await chrome.runtime.sendMessage({ action: 'getState' });
+            if (state && state.isRunning) {
                 this.isRunning = true;
-                this.timeLeft = badgeStatus.timeLeft;
+                this.isWorkTime = state.isWorkTime;
+                this.timeLeft = state.timeLeft;
+                this.workDuration = state.workDuration;
+                this.breakDuration = state.breakDuration;
+                this.workDurationInput.value = this.workDuration;
+                this.breakDurationInput.value = this.breakDuration;
                 this.startCountdown();
             } else {
-                // バックグラウンドが動いていない場合はストレージから読み込み
-                const result = await chrome.storage.local.get(['pomodoroState']);
-                if (result.pomodoroState) {
-                    const state = result.pomodoroState;
-                    this.isRunning = state.isRunning;
-                    
-                    if (this.isRunning) {
-                        // タイマーが実行中の場合、経過時間を計算
-                        const elapsed = Math.floor((Date.now() - state.startTime) / 1000);
-                        this.timeLeft = Math.max(0, state.timeLeft - elapsed);
-                        this.startTime = state.startTime;
-                        
-                        if (this.timeLeft > 0) {
-                            this.startCountdown();
-                        } else {
-                            this.timerComplete();
-                        }
-                    } else {
-                        this.timeLeft = this.duration;
-                    }
-                }
+                this.updateDisplay();
             }
-            
-            this.updateDisplay();
-            this.updateButtons();
+            this.updateUI();
         } catch (error) {
             console.error('状態の読み込みエラー:', error);
-            // エラーの場合はデフォルト状態に戻す
-            this.timeLeft = this.duration;
-            this.isRunning = false;
             this.updateDisplay();
-            this.updateButtons();
+            this.updateUI();
         }
     }
-    
-    async saveState() {
-        try {
-            await chrome.storage.local.set({
-                pomodoroState: {
-                    timeLeft: this.timeLeft,
-                    isRunning: this.isRunning,
-                    startTime: this.startTime || Date.now()
-                }
-            });
-        } catch (error) {
-            console.error('状態の保存エラー:', error);
-        }
-    }
-    
-    startTimer() {
-        if (!this.isRunning) {
-            this.isRunning = true;
-            this.startTime = Date.now();
-            this.saveState();
-            this.startCountdown();
-            this.updateButtons();
-            
-            // バックグラウンドスクリプトにブロック開始を通知
-            chrome.runtime.sendMessage({
-                action: 'startBlocking',
-                duration: this.timeLeft
-            });
-        }
-    }
-    
-    stopTimer() {
+
+    toggleTimer() {
+        this.isRunning = !this.isRunning;
         if (this.isRunning) {
-            this.isRunning = false;
-            this.timeLeft = this.duration;
-            this.startTime = null;
-            
+            this.startCountdown();
+            chrome.runtime.sendMessage({
+                action: 'startTimer',
+                workDuration: this.workDuration,
+                breakDuration: this.breakDuration
+            });
+        } else {
             if (this.intervalId) {
                 clearInterval(this.intervalId);
                 this.intervalId = null;
             }
-            
-            this.saveState();
-            this.updateDisplay();
-            this.updateButtons();
-            
-            // バックグラウンドスクリプトにブロック停止を通知
-            chrome.runtime.sendMessage({
-                action: 'stopBlocking'
-            });
+            chrome.runtime.sendMessage({ action: 'pauseTimer' });
         }
+        this.updateUI();
     }
-    
+
     startCountdown() {
         if (this.intervalId) {
             clearInterval(this.intervalId);
         }
-        
+
         this.intervalId = setInterval(() => {
-            if (this.startTime) {
-                // 正確な経過時間を計算
-                const elapsed = Math.floor((Date.now() - this.startTime) / 1000);
-                this.timeLeft = Math.max(0, this.duration - elapsed);
-            } else {
-                // フォールバック（通常は使用されない）
-                this.timeLeft--;
-            }
-            
+            this.timeLeft--;
             this.updateDisplay();
-            this.saveState();
-            
+
             if (this.timeLeft <= 0) {
-                this.timerComplete();
+                this.switchMode();
             }
         }, 1000);
     }
-    
-    timerComplete() {
-        this.isRunning = false;
-        this.timeLeft = this.duration;
-        this.startTime = null;
-        
-        if (this.intervalId) {
-            clearInterval(this.intervalId);
-            this.intervalId = null;
-        }
-        
-        this.saveState();
-        this.updateDisplay();
-        this.updateButtons();
-        
-        // バックグラウンドスクリプトにタイマー完了を通知
-        chrome.runtime.sendMessage({
-            action: 'timerComplete'
-        });
-        
-        // アラートを削除して、バックグラウンドスクリプトに完了処理を委任
-        // alert('ポモドーロタイマーが完了しました！お疲れ様でした。');
+
+    switchMode() {
+        this.isWorkTime = !this.isWorkTime;
+        this.timeLeft = (this.isWorkTime ? this.workDuration : this.breakDuration) * 60;
+        this.updateUI();
+        // バックグラウンドにもモード切替を通知
+        chrome.runtime.sendMessage({ action: 'switchMode' });
     }
-    
+
     updateDisplay() {
         const minutes = Math.floor(this.timeLeft / 60);
         const seconds = this.timeLeft % 60;
         this.timerDisplay.textContent = 
             `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-        
-        // 残り時間に応じて色を変更
-        if (this.timeLeft <= 60 && this.isRunning) {
-            this.timerDisplay.style.color = '#ff0000'; // 赤色
-        } else if (this.timeLeft <= 300 && this.isRunning) {
-            this.timerDisplay.style.color = '#ff9500'; // オレンジ色
-        } else {
-            this.timerDisplay.style.color = '#333'; // 通常色
-        }
     }
-    
-    updateButtons() {
+
+    updateUI() {
         if (this.isRunning) {
-            this.startBtn.disabled = true;
+            this.startBtn.textContent = '一時停止';
             this.startBtn.classList.add('disabled');
-            this.stopBtn.disabled = false;
-            this.stopBtn.classList.remove('disabled');
+            this.workDurationInput.disabled = true;
+            this.breakDurationInput.disabled = true;
         } else {
-            this.startBtn.disabled = false;
+            this.startBtn.textContent = '開始';
             this.startBtn.classList.remove('disabled');
-            this.stopBtn.disabled = true;
-            this.stopBtn.classList.add('disabled');
+            this.workDurationInput.disabled = false;
+            this.breakDurationInput.disabled = false;
         }
+
+        if (this.isWorkTime) {
+            this.statusDisplay.textContent = '集中モード';
+            document.body.style.backgroundColor = '#f0f2f5';
+        } else {
+            this.statusDisplay.textContent = '休憩中';
+            document.body.style.backgroundColor = '#e0f7fa'; // 休憩中は背景色を少し変える
+        }
+        this.updateDisplay();
     }
 }
 
-// ポップアップが開かれたときにタイマーを初期化
 document.addEventListener('DOMContentLoaded', () => {
     new PomodoroTimer();
 });
